@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+
+    <!-- 向zookeeper 订阅provider 的地址，由zookeeper 定时推送 -->
+    <dubbo:registry protocol="zookeeper" address="192.168.0.51:2181" timeout="10000"/>
+    <!-- 使用dubbo 协议调用定义好的 api 接口 -->
+    <dubbo:reference id="sequenceProducer" interface="com.ipaynow.sequence.generator.unsafe.SequenceProducer"/>
+    <bean id="sequenceAllocator" class="com.ipaynow.sequence.generator.agent.SequenceAllocatorAgent">
+        <property name="sequenceName" value="yishouyun_goods_id"/>
+        <property name="sequenceProducer" ref="sequenceProducer"/>
+    </bean>
+</beans>

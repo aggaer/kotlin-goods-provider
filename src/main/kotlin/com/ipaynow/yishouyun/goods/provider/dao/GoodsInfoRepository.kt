@@ -13,8 +13,16 @@ import javax.transaction.Transactional
 
 interface GoodsInfoRepository : JpaRepository<GoodsInfo, String> {
 
-    fun findAllByStoreIdAndStatusAndNameIsLike(
+    fun findAllByStoreIdAndStatusGreaterThanAndNameIsLike(
         storeId: String,
+        status: Int,
+        name: String,
+        pageRequest: Pageable
+    ): Page<GoodsInfo>
+
+    fun findAllByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
+        mchId: String,
+        type: Byte,
         status: Int,
         name: String,
         pageRequest: Pageable
@@ -68,6 +76,21 @@ interface GoodsInfoRepository : JpaRepository<GoodsInfo, String> {
         type: Byte,
         status: Int,
         pageRequest: Pageable
+    ): Page<GoodsInfo>
+
+    fun countByStoreIdAndCategoryId(storeId: String, categoryId: Long): Int
+
+    fun findByMerchantIdAndTypeAndCategoryIdAndStatusGreaterThan(
+        mchId: String,
+        type: Byte,
+        categoryId: Long,
+        status: Int,
+        pageRequest: Pageable
+    ): Page<GoodsInfo>
+
+    fun findByStoreIdAndStatusGreaterThanOrderBySortWeight(
+        sotreId: String,
+        status: Int
     ): List<GoodsInfo>
 }
 

@@ -1,13 +1,11 @@
 package com.ipaynow.yishouyun.goods.provider.service
 
-import com.github.pagehelper.PageHelper
 import com.github.pagehelper.PageInfo
 import com.ipaynow.sequence.generator.api.SequenceAllocator
 import com.ipaynow.yishouyun.common.BusinessException
 import com.ipaynow.yishouyun.goods.bean.PageContent
 import com.ipaynow.yishouyun.goods.bean.PendingResult
 import com.ipaynow.yishouyun.goods.dto.GoodsInfoDTO
-import com.ipaynow.yishouyun.goods.dto.GoodsSkuDTO
 import com.ipaynow.yishouyun.goods.exception.GoodsException
 import com.ipaynow.yishouyun.goods.exception.ResultCode
 import com.ipaynow.yishouyun.goods.provider.dao.ColumnsGoodsRepository
@@ -18,20 +16,15 @@ import com.ipaynow.yishouyun.goods.provider.entity.GoodsInfo
 import com.ipaynow.yishouyun.goods.provider.service.mapper.GoodsInfoMapper
 import com.ipaynow.yishouyun.goods.provider.service.mapper.GoodsSkuMapper
 import com.ipaynow.yishouyun.goods.service.GoodsInfoService
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import lombok.extern.slf4j.Slf4j
+import org.springframework.data.domain.Example
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.CollectionUtils
 import java.util.*
-import java.util.concurrent.CompletableFuture
-import java.util.function.BiFunction
-import java.util.function.Supplier
-import java.util.stream.Collectors
 import javax.annotation.Resource
 
 @Slf4j
@@ -55,7 +48,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
 
     override fun findById(id: String): PendingResult<GoodsInfoDTO> {
         val goodsInfo = goodsInfoRepository.findById(id)
-                .orElseThrow { GoodsException(ResultCode.GOODS_NOT_EXISTS, String.format("ID：%s 对应的商品不存在", id)) }
+            .orElseThrow { GoodsException(ResultCode.GOODS_NOT_EXISTS, String.format("ID：%s 对应的商品不存在", id)) }
         runBlocking {
             //根据goods info中的categoryId查询category信息；
             val deferredGoodsCategory = async { goodsCategoryRepository.findById(goodsInfo.categoryId) }
@@ -68,16 +61,16 @@ class GoodsInfoServiceImpl : GoodsInfoService {
     }
 
     override fun findByStoreIdAndNameLike(
-            term: String,
-            storeId: String,
-            pageContent: PageContent,
-            status: Int
+        term: String,
+        storeId: String,
+        pageContent: PageContent,
+        status: Int
     ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findAllByStoreIdAndStatusAndNameIsLike(
-                storeId,
-                status,
-                term,
-                PageRequest.of(pageContent.pageNum, pageContent.pageSize)
+        val page = goodsInfoRepository.findAllByStoreIdAndStatusGreaterThanAndNameIsLike(
+            storeId,
+            status,
+            term,
+            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
         )
         val pageInfo = PageInfo<GoodsInfo>(page.content)
         pageInfo.pageNum = page.number
@@ -88,24 +81,31 @@ class GoodsInfoServiceImpl : GoodsInfoService {
 
     @Throws(GoodsException::class)
     override fun findByMchIdAndNameLike(
-            term: String,
-            mchId: String,
-            pageContent: PageContent
+        term: String,
+        mchId: String,
+        pageContent: PageContent
     ): PendingResult<List<GoodsInfoDTO>> {
-        val pageInfo = PageHelper
-                .startPage<Any>(pageContent.pageNum!!, pageContent.pageSize!!, pageContent.orderBy)
-                .doSelectPageInfo<GoodsInfo> { goodsInfoMapper!!.selectByMchIdAndNameLike("%$term%", mchId) }
+        val page = goodsInfoRepository.findAllByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
+            mchId,
+            0,
+            -1,
+            term,
+            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
+        )
+        val pageInfo = PageInfo<GoodsInfo>(page.content)
         return warpWithSkuList(pageInfo)
     }
 
     override fun find(goodsInfoDTO: GoodsInfoDTO): PendingResult<List<GoodsInfoDTO>> {
-        return wrapToPendingResult(goodsInfoMapper!!.select(goodsInfoMapper!!.to(goodsInfoDTO)))
+        return wrapToPendingResult(goodsInfoRepository.findAll(Example.of(goodsInfoMapper.to(goodsInfoDTO)!!)))
     }
 
-    override fun find(goodsInfoDTO: GoodsInfoDTO?, pageRequest: PageContent?): PendingResult<List<GoodsInfoDTO>> {
-        val pageInfo = PageHelper    //分页查询
-                .startPage<Any>(pageRequest!!.pageNum!!, pageRequest.pageSize!!, pageRequest.orderBy)
-                .doSelectPageInfo<GoodsInfo> { goodsInfoMapper!!.select(goodsInfoMapper!!.to(goodsInfoDTO)) }
+    override fun find(goodsInfoDTO: GoodsInfoDTO, pageRequest: PageContent): PendingResult<List<GoodsInfoDTO>> {
+        val page = goodsInfoRepository.findAll(
+            Example.of(goodsInfoMapper.to(goodsInfoDTO)!!),
+            PageRequest.of(pageRequest.pageNum, pageRequest.pageSize)
+        )
+        val pageInfo = PageInfo<GoodsInfo>(page.content)
         return warpWithSkuList(pageInfo)
     }
 
@@ -115,7 +115,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
      * @return 商品条目集合
      */
     override fun findAll(): PendingResult<List<GoodsInfoDTO>> {
-        val goodsInfoList = goodsInfoMapper!!.selectAll()
+        val goodsInfoList = goodsInfoRepository.findAll()
         return wrapToPendingResult(goodsInfoList)
     }
 
@@ -126,66 +126,87 @@ class GoodsInfoServiceImpl : GoodsInfoService {
      */
     override fun findAllGroupByCategory(): PendingResult<List<GoodsInfoDTO>> {
         //关联category表查询category name，并入goods info list；
-        val goodsInfoList = goodsInfoMapper!!.selectAll().stream()
-                .peek({ goodsInfo ->
-                    val goodsSkusFuture =
-                            CompletableFuture.supplyAsync { goodsSkuRepository!!.selectByGoodsId(goodsInfo.getId()) }
-                    val goodsCategory = goodsCategoryMapper!!.selectByPrimaryKey(goodsInfo.getCategoryId())
-                    goodsInfo.setCategoryName(goodsCategory.name)
-                    goodsInfo.setGoodsSkuList(goodsSkusFuture.join())
-                }).collect(Collectors.toList<T>())
+        val goodsInfoList = goodsInfoRepository.findAll()
+        runBlocking {
+            goodsInfoList.forEach {
+                val deferredGoodsSku = async { goodsSkuRepository.findByGoodsId(it.id) }
+                val deferredGoodsCategory = async { goodsCategoryRepository.findById(it.categoryId) }
+                it.categoryName = deferredGoodsCategory.await().get().name
+                it.goodsSkuList = deferredGoodsSku.await().orElseGet { listOf() }
+            }
+        }
         return wrapToPendingResult(goodsInfoList)
     }
 
     override fun findByStoreIdGroupByCategory(storeId: String): PendingResult<List<GoodsInfoDTO>> {
         //关联category表查询category name，并入goods info list；
-        val goodsInfoList = goodsInfoMapper!!.selectByStoreId(storeId, 0).stream()    //小程序端不展示已下架商品;
-                .peek({ goodsInfo ->
-                    val goodsSkusFuture =
-                            CompletableFuture.supplyAsync { goodsSkuRepository!!.selectByGoodsId(goodsInfo.getId()) }
-                    val goodsCategory = goodsCategoryMapper!!.selectByPrimaryKey(goodsInfo.getCategoryId())
-                    goodsInfo.setCategoryName(goodsCategory.name)
-                    goodsInfo.setGoodsSkuList(goodsSkusFuture.join())
-                }).collect(Collectors.toList<T>())
+        val goodsInfoList =
+            goodsInfoRepository.findByStoreIdAndStatusGreaterThanOrderBySortWeight(storeId, 0)
+        runBlocking {
+            goodsInfoList.forEach {
+                val deferredGoodsSku = async { goodsSkuRepository.findByGoodsId(it.id) }
+                val deferredGoodsCategory = async { goodsCategoryRepository.findById(it.categoryId) }
+                it.categoryName = deferredGoodsCategory.await().get().name
+                it.goodsSkuList = deferredGoodsSku.await().orElseGet { listOf() }
+            }
+        }
         return wrapToPendingResult(goodsInfoList)
     }
 
     //根据商品类目id查询商品列表;
     override fun findMchGoodsByCategoryId(
-            mchId: String,
-            categoryId: Long?,
-            pageRequest: PageContent
+        mchId: String,
+        categoryId: Long,
+        pageRequest: PageContent
     ): PendingResult<List<GoodsInfoDTO>> {
-        val pageInfo = PageHelper    //分页查询
-                .startPage<Any>(pageRequest.pageNum!!, pageRequest.pageSize!!, pageRequest.orderBy)
-                .doSelectPageInfo<GoodsInfo> { goodsInfoMapper!!.selectMchGoodsByCategoryId(mchId, categoryId) }
+        val page =
+            goodsInfoRepository.findByMerchantIdAndTypeAndCategoryIdAndStatusGreaterThan(
+                mchId,
+                0,
+                categoryId,
+                -1,
+                PageRequest.of(pageRequest.pageNum, pageRequest.pageSize)
+            )
+        val pageInfo = PageInfo<GoodsInfo>(page.content)
         return warpWithSkuList(pageInfo)
     }
 
     @Transactional
     @Throws(GoodsException::class)
-    override fun saveStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO): Boolean? {
+    override fun saveStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO): Boolean {
         val goodsId = sequenceAllocator.nextId()
-        //批量保存sku记录；
-        runBlocking {
-            val unsavedSkuList = goodsInfoDTO.skuList.map {
-                it.id = sequenceAllocator.nextId()
-                it.goodsId = goodsId
-                it
-            }
-            try {
-                goodsSkuRepository.saveAll(goodsSkuMapper.to(unsavedSkuList))
-            } catch (e: Exception) {
-            }
-        }
-        //保存前将排序权重字段插入对象
-        val currentColumnsCountFuture =
-                CompletableFuture.supplyAsync { goodsInfoMapper!!.selectCountByStoreId(goodsInfoDTO.storeId) }
-        val target = goodsInfoMapper!!.to(goodsInfoDTO)
-        //保存前插入id
+        val target = goodsInfoMapper.to(goodsInfoDTO) ?: return false
         target.id = goodsId
-        target.sortWeight = (currentColumnsCountFuture.join() + 1) * 100
-        return goodsSkuSavingFuture.join() * goodsInfoMapper!!.insert(target) !== 0
+        //批量保存sku记录；
+        return runBlocking {
+            val deferredSkusSavingResult = async { insertSkuList(goodsInfoDTO, goodsId) }
+            val deferredGoodsInfoSavingResult = async { insertGoodsInfo(target) }
+            (deferredGoodsInfoSavingResult.await() * deferredSkusSavingResult.await()) > 0
+        }
+    }
+
+    /**
+     * 插入goodsInfo之前先计算排序字段
+     */
+    fun insertGoodsInfo(goodsInfo: GoodsInfo): Int {
+        //保存前将排序权重字段插入对象
+        val currentColumns = goodsInfoRepository.countByStoreIdAndCategoryId(goodsInfo.storeId, goodsInfo.categoryId)
+        goodsInfo.sortWeight = (currentColumns + 1) * 100
+        goodsInfoRepository.save(goodsInfo)
+        return 1
+    }
+
+    /**
+     * 插入sku列表之前先分配序列号id和goodsId
+     */
+    fun insertSkuList(goodsInfoDTO: GoodsInfoDTO, goodsId: String): Int {
+        val unsavedSkuList = goodsInfoDTO.skuList.map {
+            it.id = sequenceAllocator.nextId()
+            it.goodsId = goodsId
+            it
+        }
+        goodsSkuRepository.saveAll(goodsSkuMapper.to(unsavedSkuList))
+        return 1
     }
 
     @Transactional
@@ -193,7 +214,8 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         return runBlocking {
             //分别存储goodsInfo和goodsSku
             val deferredGoodsInfoSavingResult = async { goodsInfoRepository.save(goodsInfoMapper.to(goodsInfoDTO)!!) }
-            val deferredGoodsSkusSavingResult = async { goodsSkuRepository.saveAll(goodsSkuMapper.to(goodsInfoDTO.skuList)) }
+            val deferredGoodsSkusSavingResult =
+                async { goodsSkuRepository.saveAll(goodsSkuMapper.to(goodsInfoDTO.skuList)) }
             deferredGoodsInfoSavingResult.await()
             deferredGoodsSkusSavingResult.await()
             true
@@ -233,12 +255,12 @@ class GoodsInfoServiceImpl : GoodsInfoService {
      */
     override fun findByMchId(mchId: String, pageContent: PageContent): PendingResult<List<GoodsInfoDTO>> {
         return wrapToPendingResult(
-                goodsInfoRepository.findByMerchantIdAndTypeAndStatusGreaterThan(
-                        mchId,
-                        0,
-                        -1,
-                        PageRequest.of(pageContent.pageNum, pageContent.pageSize)
-                )
+            goodsInfoRepository.findByMerchantIdAndTypeAndStatusGreaterThan(
+                mchId,
+                0,
+                -1,
+                PageRequest.of(pageContent.pageNum, pageContent.pageSize)
+            ).content
         )
     }
 
@@ -308,7 +330,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
     override fun deleteInBatch(list: MutableList<String>): Boolean {
         //删除前先判断这批商品是否在专栏中
         val existsGoods =
-                columnsGoodsRepository.findByGoodsIdIn(list).map { columnsGoods -> columnsGoods.goodsId }
+            columnsGoodsRepository.findByGoodsIdIn(list).map { columnsGoods -> columnsGoods.goodsId }
         list.removeAll(existsGoods)
         return goodsInfoRepository.deleteInBatch(list) > 0 && CollectionUtils.isEmpty(existsGoods)
     }
@@ -327,8 +349,8 @@ class GoodsInfoServiceImpl : GoodsInfoService {
     //将商品列表封装成 PendingResult
     private fun wrapToPendingResult(goodsInfoList: List<GoodsInfo>): PendingResult<List<GoodsInfoDTO>> {
         return PendingResult
-                .ofNullable { goodsInfoList }
-                .orElseGet { emptyList() }
-                .map { goodsInfoMapper.from(it) }
+            .ofNullable { goodsInfoList }
+            .orElseGet { emptyList() }
+            .map { goodsInfoMapper.from(it) }
     }
 }
