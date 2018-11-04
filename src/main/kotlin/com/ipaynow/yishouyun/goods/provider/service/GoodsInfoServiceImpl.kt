@@ -66,7 +66,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         pageContent: PageContent,
         status: Int
     ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findAllByStoreIdAndStatusGreaterThanAndNameIsLike(
+        val page = goodsInfoRepository.findByStoreIdAndStatusGreaterThanAndNameIsLike(
             storeId,
             status,
             term,
@@ -85,7 +85,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         mchId: String,
         pageContent: PageContent
     ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findAllByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
+        val page = goodsInfoRepository.findByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
             mchId,
             0,
             -1,

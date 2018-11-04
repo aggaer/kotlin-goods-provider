@@ -40,6 +40,7 @@ interface GoodsSkuMapper {
     fun to(goodSkuDTOList: List<GoodsSkuDTO>): List<GoodsSku>
 }
 
+@Suppress("unused")
 @Mapper(
     componentModel = "spring",
     unmappedTargetPolicy = ReportingPolicy.IGNORE

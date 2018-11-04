@@ -13,14 +13,14 @@ import javax.transaction.Transactional
 
 interface GoodsInfoRepository : JpaRepository<GoodsInfo, String> {
 
-    fun findAllByStoreIdAndStatusGreaterThanAndNameIsLike(
+    fun findByStoreIdAndStatusGreaterThanAndNameIsLike(
         storeId: String,
         status: Int,
         name: String,
         pageRequest: Pageable
     ): Page<GoodsInfo>
 
-    fun findAllByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
+    fun findByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
         mchId: String,
         type: Byte,
         status: Int,

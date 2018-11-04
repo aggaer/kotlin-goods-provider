@@ -32,7 +32,7 @@ class RepositoryTest {
     @Test
     fun findByStoreIdAndNameLike() {
         val page =
-            goodsInfoRepository.findAllByStoreIdAndStatusAndNameIsLike("000000100537579", 0, "汉堡", PageRequest.of(0, 5))
+            goodsInfoRepository.findByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike("000000100537579", 0, 1,"汉堡", PageRequest.of(0, 5))
         println(JSON.toJSONString(page, true))
     }
 
