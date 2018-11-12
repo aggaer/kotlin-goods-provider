@@ -79,6 +79,26 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         return warpWithSkuList(pageInfo)
     }
 
+    override fun findByStoreIdAndCategoryIdAndNameLike(
+        term: String,
+        storeId: String,
+        categoryId: Long,
+        pageContent: PageContent,
+        status: Int
+    ): PendingResult<List<GoodsInfoDTO>> {
+        val page = goodsInfoRepository.findByStoreIdAndStatusGreaterThanAndNameIsLike(
+            storeId,
+            status,
+            term,
+            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
+        )
+        val pageInfo = PageInfo<GoodsInfo>(page.content)
+        pageInfo.pageNum = page.number
+        pageInfo.pageSize = page.size
+        pageInfo.total = page.totalPages.toLong()
+        return warpWithSkuList(pageInfo)
+    }
+
     @Throws(GoodsException::class)
     override fun findByMchIdAndNameLike(
         term: String,
@@ -95,6 +115,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         val pageInfo = PageInfo<GoodsInfo>(page.content)
         return warpWithSkuList(pageInfo)
     }
+
 
     override fun find(goodsInfoDTO: GoodsInfoDTO): PendingResult<List<GoodsInfoDTO>> {
         return wrapToPendingResult(goodsInfoRepository.findAll(Example.of(goodsInfoMapper.to(goodsInfoDTO)!!)))
