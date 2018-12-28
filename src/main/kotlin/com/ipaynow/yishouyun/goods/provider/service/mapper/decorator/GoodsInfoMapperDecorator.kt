@@ -36,7 +36,7 @@ abstract class GoodsInfoConverterDecorator : GoodsInfoMapper {
             val deferredSubImgs = async { convertSubImgsToJsonArray(goodsInfo.subImgs) }
             goodsInfoDTO.attributes = deferredAttributes.await()        //将goodsInfo中的属性列表转为json objects
             goodsInfoDTO.lowestDiscountPrice = deferredLowestDiscountPrice.await()      //设置sku列表中的最低现价
-            goodsInfoDTO.lowestsellingPrice = deferredLowestsellingPrice.await()        //计算sku列表中的最低原价
+            goodsInfoDTO.lowestSellingPrice = deferredLowestsellingPrice.await()        //计算sku列表中的最低原价
             goodsInfoDTO.subImgs = deferredSubImgs.await()          //将subImgs从string转为数组；
         }
         return goodsInfoDTO

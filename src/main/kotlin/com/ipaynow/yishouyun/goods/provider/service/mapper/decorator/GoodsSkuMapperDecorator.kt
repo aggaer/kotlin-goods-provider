@@ -19,7 +19,7 @@ abstract class GoodsSkuConverterDecorator : GoodsSkuMapper {
         }
         val goodsSkuDTO = goodsSkuConverter.from(goodsSku) ?: return null
         val specification = goodsSku.specification
-        goodsSkuDTO.specificatioNodes =
+        goodsSkuDTO.specifications =
                 if (specification.isNullOrEmpty()) null else JSON.parseObject(specification, JSONObject::class.java)
         return goodsSkuDTO
     }
@@ -33,7 +33,7 @@ abstract class GoodsSkuConverterDecorator : GoodsSkuMapper {
             return null
         }
         val goodsSku = goodsSkuConverter.to(goodsSkuDTO) ?: return null
-        val specificatioNodes = goodsSkuDTO.specificatioNodes
+        val specificatioNodes = goodsSkuDTO.specifications
         goodsSku.specification = if (specificatioNodes.isNullOrEmpty()) null else specificatioNodes.toJSONString()
         return goodsSku
     }

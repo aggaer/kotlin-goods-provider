@@ -60,63 +60,6 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         return PendingResult.of(goodsInfoMapper.from(goodsInfo))
     }
 
-    override fun findByStoreIdAndNameLike(
-        term: String,
-        storeId: String,
-        pageContent: PageContent,
-        status: Int
-    ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findByStoreIdAndStatusGreaterThanAndNameIsLike(
-            storeId,
-            status,
-            term,
-            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
-        )
-        val pageInfo = PageInfo<GoodsInfo>(page.content)
-        pageInfo.pageNum = page.number
-        pageInfo.pageSize = page.size
-        pageInfo.total = page.totalPages.toLong()
-        return warpWithSkuList(pageInfo)
-    }
-
-    override fun findByStoreIdAndCategoryIdAndNameLike(
-        term: String,
-        storeId: String,
-        categoryId: Long,
-        pageContent: PageContent,
-        status: Int
-    ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findByStoreIdAndStatusGreaterThanAndNameIsLike(
-            storeId,
-            status,
-            term,
-            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
-        )
-        val pageInfo = PageInfo<GoodsInfo>(page.content)
-        pageInfo.pageNum = page.number
-        pageInfo.pageSize = page.size
-        pageInfo.total = page.totalPages.toLong()
-        return warpWithSkuList(pageInfo)
-    }
-
-    @Throws(GoodsException::class)
-    override fun findByMchIdAndNameLike(
-        term: String,
-        mchId: String,
-        pageContent: PageContent
-    ): PendingResult<List<GoodsInfoDTO>> {
-        val page = goodsInfoRepository.findByMerchantIdAndTypeAndStatusGreaterThanAndNameIsLike(
-            mchId,
-            0,
-            -1,
-            term,
-            PageRequest.of(pageContent.pageNum, pageContent.pageSize)
-        )
-        val pageInfo = PageInfo<GoodsInfo>(page.content)
-        return warpWithSkuList(pageInfo)
-    }
-
-
     override fun find(goodsInfoDTO: GoodsInfoDTO): PendingResult<List<GoodsInfoDTO>> {
         return wrapToPendingResult(goodsInfoRepository.findAll(Example.of(goodsInfoMapper.to(goodsInfoDTO)!!)))
     }
@@ -137,25 +80,6 @@ class GoodsInfoServiceImpl : GoodsInfoService {
      */
     override fun findAll(): PendingResult<List<GoodsInfoDTO>> {
         val goodsInfoList = goodsInfoRepository.findAll()
-        return wrapToPendingResult(goodsInfoList)
-    }
-
-    /**
-     * 查询所有商品条目，按类目名分组
-     *
-     * @return 商品条目集合
-     */
-    override fun findAllGroupByCategory(): PendingResult<List<GoodsInfoDTO>> {
-        //关联category表查询category name，并入goods info list；
-        val goodsInfoList = goodsInfoRepository.findAll()
-        runBlocking {
-            goodsInfoList.forEach {
-                val deferredGoodsSku = async { goodsSkuRepository.findByGoodsId(it.id) }
-                val deferredGoodsCategory = async { goodsCategoryRepository.findById(it.categoryId) }
-                it.categoryName = deferredGoodsCategory.await().get().name
-                it.goodsSkuList = deferredGoodsSku.await().orElseGet { listOf() }
-            }
-        }
         return wrapToPendingResult(goodsInfoList)
     }
 
@@ -194,12 +118,12 @@ class GoodsInfoServiceImpl : GoodsInfoService {
 
     @Transactional
     @Throws(GoodsException::class)
-    override fun saveStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO): Boolean {
+    override fun saveStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO) {
         val goodsId = sequenceAllocator.nextId()
-        val target = goodsInfoMapper.to(goodsInfoDTO) ?: return false
-        target.id = goodsId
+        val target = goodsInfoMapper.to(goodsInfoDTO)
+        target!!.id = goodsId
         //批量保存sku记录；
-        return runBlocking {
+        runBlocking {
             val deferredSkusSavingResult = async { insertSkuList(goodsInfoDTO, goodsId) }
             val deferredGoodsInfoSavingResult = async { insertGoodsInfo(target) }
             (deferredGoodsInfoSavingResult.await() * deferredSkusSavingResult.await()) > 0
@@ -231,8 +155,8 @@ class GoodsInfoServiceImpl : GoodsInfoService {
     }
 
     @Transactional
-    override fun updateStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO): Boolean? {
-        return runBlocking {
+    override fun updateStoreGoodsInfo(goodsInfoDTO: GoodsInfoDTO) {
+        runBlocking {
             //分别存储goodsInfo和goodsSku
             val deferredGoodsInfoSavingResult = async { goodsInfoRepository.save(goodsInfoMapper.to(goodsInfoDTO)!!) }
             val deferredGoodsSkusSavingResult =
@@ -248,7 +172,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
      *
      * @param goodsId 待下架商品id
      */
-    override fun pullOffShelves(goodsId: String): Boolean? {
+    override fun pullOffShelves(storeId: String, goodsId: String): Boolean? {
         return !columnsGoodsRepository.existsByGoodsId(goodsId) && goodsInfoRepository.pullOffShelves(goodsId) > 0
     }
 
@@ -256,7 +180,7 @@ class GoodsInfoServiceImpl : GoodsInfoService {
         return goodsInfoRepository.putOnShelves(goodsId) > 0
     }
 
-    override fun pullOffShelvesBatch(list: MutableList<String>): Boolean? {
+    override fun pullOffShelvesBatch(storeId: String, list: MutableList<String>): Boolean? {
         //下架前先判断这批商品是否在专栏中
         val existsGoods = columnsGoodsRepository.findByGoodsIdIn(list).map { it.goodsId }
         list.removeAll(existsGoods)
@@ -373,5 +297,42 @@ class GoodsInfoServiceImpl : GoodsInfoService {
             .ofNullable { goodsInfoList }
             .orElseGet { emptyList() }
             .map { goodsInfoMapper.from(it) }
+    }
+
+    override fun findByNameLike(p0: GoodsInfoDTO?, p1: PageContent?): PendingResult<MutableList<GoodsInfoDTO>> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findGoodsInfoAndCategoryByIdIn(p0: MutableList<String>?): PendingResult<MutableList<GoodsInfoDTO>> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findAssociationIdsByStoreIdAndSourceId(p0: String?, p1: Int?): MutableList<String> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findByStoreIdAndStatusGreaterThan(
+        p0: String?,
+        p1: Int?,
+        p2: PageContent?
+    ): PendingResult<MutableList<GoodsInfoDTO>> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findAssociationIdBySourceId(p0: Int?): MutableList<String> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun findByStoreIdAndCategoryIdAndStatusGreaterThan(
+        p0: String?,
+        p1: Long?,
+        p2: Int?,
+        p3: PageContent?
+    ): PendingResult<MutableList<GoodsInfoDTO>> {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun deleteByStoreIdAndId(p0: String?, p1: String?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 }
